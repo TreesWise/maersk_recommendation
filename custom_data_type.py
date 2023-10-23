@@ -19,13 +19,10 @@ class UserInDB(User):
     hashed_password: str
 
 class UserInput(BaseModel):
-    eqp_name : List=None
     item_name : List=None
     maker : List=None
     model : List=None
     part_num : List=None
-    draw_num : List=None
-    pos_num : List=None
     delivery_port_list : int= None
     n_vendor : int=None
 

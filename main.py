@@ -225,7 +225,8 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
     user_inp =  userinput.dict()
     print(user_inp)
     # data = read_data_from_blob_parquet("export")
-    data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
+    # data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
+    data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
     data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
     print(data.head(), data.shape)
     #data['Delivery_Port_Id'] = data['Delivery_Port_Id'].astype('int')
@@ -236,10 +237,10 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
     if int(len(data)) == 0:
         raise HTTPException(status_code=404, detail='No data found for the given input')
     try:
-        recommended_vendor = recommend_vendor(data, user_inp['eqp_name'], user_inp["item_name"],user_inp['maker'], user_inp['model'], user_inp['part_num'], user_inp['draw_num'], user_inp['pos_num'], user_inp['delivery_port_list'], lead_time_weight, price_weight, rating_weight,user_inp['n_vendor'])
+        recommended_vendor = recommend_vendor(data, user_inp["item_name"],user_inp['maker'], user_inp['model'], user_inp['part_num'], user_inp['delivery_port_list'], lead_time_weight, price_weight, rating_weight,user_inp['n_vendor'])
         recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
         df = pd.DataFrame(recommended_vendor)
-        grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port'])[['Item','Score']].agg(list).reset_index()
+        grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
         # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
         # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
         print('xxxxxxxxxxxxxxxxxxxxxxxx')
@@ -294,6 +295,7 @@ def convert_dict(data):
         entry.pop("Score")
         entry['vendor_item_count'] = len(entry['Item_Detail'])
         entry['vendor_item_score'] = sum([i['Score'] for i in entry["Item_Detail"]])
+        entry['vendor_status'] = entry['Included']
         data_new.append(entry)
     return data_new
 
@@ -384,16 +386,17 @@ def read_data_from_blob_parquet(dataset_name):
 #             print(" ******************final dataframe***********************\n",final_dataframe)
 #     #print("---------------------------------------------\n",final_dataframe)
 #     return final_dataframe
-def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num, pos_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
+def recommend_vendor(data, item_name, maker, model, part_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
+    c_client = 'Maersk'
     # final_dataframe=pd.DataFrame(columns=['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score'])
-    final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score'])
+    final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Included','Score'])
     print('started')
     ps = PorterStemmer()
     items_id_map = {}
     new_dict = {}
-    cat = [' '.join(list(j.split())[:-1]) for j in data['Item_Mapps_id'].unique()]
-    for eq,it,mk,md,par,drw,pos in zip(eqp_name,item_name, maker, model, part_num, draw_num, pos_num):
-        ids = Item_id_gen_sub(eq,it,mk,md,par,drw,pos,ps)
+    cat = list(data['Item_mak_mod_processed_uid_80'].unique())
+    for it,mk,md,par in zip(item_name, maker, model, part_num):
+        ids = Item_id_gen_sub(it,mk,md,par,ps)
         try:
             items_id_map.update(ids)
             print('has global')
@@ -401,14 +404,15 @@ def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num,
             # print('ids',ids)
             # print('item_name',it)
             # print('pos_num',pos)
-            first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+pos, ids[2]#first part : full part
+            first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+par, ids[2]#first part : full part
             if status==True:
                 print('sim checking')
                 print('it -',it)
                 
                 main_dict = {}
                 for y in cat:
-                    main_dict[y] = seqratio(first_part,y)
+                    # print('y',y)
+                    main_dict[y] = seqratio(first_part.split(),y.split())
                 replace = {}
                 list1 = []
                 for key in main_dict.keys():
@@ -424,14 +428,14 @@ def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num,
                         items_id_map[first_part+' '+second_part]  = [None,last_part]               
                 print('reached')     
             else:
-                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])    
+                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])    
   
     print('items_id_map',items_id_map)           
     for keyys in items_id_map:
         if items_id_map[keyys][0]!=None:
-            if items_id_map[keyys][0] in data['Item_Mapps_id'].values:
+            if items_id_map[keyys][0] in data['Item_Mapps_Id_80'].values:
                 cp = items_id_map[keyys][0]
-                filtered_data = data[data['Item_Mapps_id'] == cp]
+                filtered_data = data[data['Item_Mapps_Id_80'] == cp]
                 try:
                     filtered_data['Delivery_Port_Id'] = filtered_data['Delivery_Port_Id'].astype(int)
                 except:
@@ -439,11 +443,12 @@ def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num,
                 print('port id',filtered_data['Delivery_Port_Id'])
                 for deliveryport in [delivery_port_list]:
                     filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
+                    filtered_data1_copy = filtered_data1.copy()
                     print('del len - ',len(filtered_data1))
                     if len(filtered_data1) == 0:
                         print('xxxxxxxxxxx')
                         print("'No data found for the given input'")
-                        final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
+                        final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Included':'NA','Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
                         # filtered_reco=filtered_reco[['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score']]
                         continue
                     min_l=filtered_data1['Lead_Time'].min()
@@ -464,6 +469,18 @@ def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num,
                     
                     filtered_reco=recommended_vendor.head(n_vendor)
                     filtered_reco=filtered_reco[['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']]
+                    client_status = []
+                    for vid in filtered_reco['Vendor']:
+                        if vid in list(filtered_data1_copy['Vendor'].unique()):
+                            vendor_code = list(filtered_data1_copy[filtered_data1_copy['Vendor']==vid]['Vendor_Code'])[0]
+                            print('kl',filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client'])
+                            if c_client in filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client']:
+                                client_status.append('Yes')
+                            else:
+                                client_status.append('Global list')    
+                        else:
+                            client_status.append('Global list')    
+                    filtered_reco['Included'] = client_status                
                     print('filtered_reco',filtered_reco)
                     # filtered_reco.loc[0,'Item'] = list(items_id_map[keyys][1].split('_'))[0]
                     
@@ -471,11 +488,103 @@ def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num,
                         final_dataframe= pd.concat([final_dataframe,filtered_reco])
                     print(" ******************final dataframe***********************\n",final_dataframe) 
             else:
-                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])                       
+                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                       
         else:
-            final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])                      
+            final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                      
         print('final_dataframe -',final_dataframe)
     return final_dataframe
+# def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num, pos_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
+#     # final_dataframe=pd.DataFrame(columns=['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score'])
+#     final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score'])
+#     print('started')
+#     ps = PorterStemmer()
+#     items_id_map = {}
+#     new_dict = {}
+#     cat = [' '.join(list(j.split())[:-1]) for j in data['Item_Mapps_id'].unique()]
+#     for eq,it,mk,md,par,drw,pos in zip(eqp_name,item_name, maker, model, part_num, draw_num, pos_num):
+#         ids = Item_id_gen_sub(eq,it,mk,md,par,drw,pos,ps)
+#         try:
+#             items_id_map.update(ids)
+#             print('has global')
+#         except:
+#             # print('ids',ids)
+#             # print('item_name',it)
+#             # print('pos_num',pos)
+#             first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+pos, ids[2]#first part : full part
+#             if status==True:
+#                 print('sim checking')
+#                 print('it -',it)
+                
+#                 main_dict = {}
+#                 for y in cat:
+#                     main_dict[y] = seqratio(first_part,y)
+#                 replace = {}
+#                 list1 = []
+#                 for key in main_dict.keys():
+#                     s_dict = {k: v for k,v in main_dict.items() if v>.80} #80%   
+#                     s_dict_filt = dict(sorted(s_dict.items(),key=lambda x:x[1],reverse=True))
+#                     try:
+#                         del s_dict_filt[key]
+#                     except:
+#                         pass    
+#                     if len(s_dict_filt.keys())>0:
+#                         items_id_map[first_part+' '+second_part] = [list(s_dict_filt.keys())[0]+' '+second_part, last_part]
+#                     else:
+#                         items_id_map[first_part+' '+second_part]  = [None,last_part]               
+#                 print('reached')     
+#             else:
+#                 final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])    
+  
+#     print('items_id_map',items_id_map)           
+#     for keyys in items_id_map:
+#         if items_id_map[keyys][0]!=None:
+#             if items_id_map[keyys][0] in data['Item_Mapps_id'].values:
+#                 cp = items_id_map[keyys][0]
+#                 filtered_data = data[data['Item_Mapps_id'] == cp]
+#                 try:
+#                     filtered_data['Delivery_Port_Id'] = filtered_data['Delivery_Port_Id'].astype(int)
+#                 except:
+#                     pass    
+#                 print('port id',filtered_data['Delivery_Port_Id'])
+#                 for deliveryport in [delivery_port_list]:
+#                     filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
+#                     print('del len - ',len(filtered_data1))
+#                     if len(filtered_data1) == 0:
+#                         print('xxxxxxxxxxx')
+#                         print("'No data found for the given input'")
+#                         final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
+#                         # filtered_reco=filtered_reco[['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score']]
+#                         continue
+#                     min_l=filtered_data1['Lead_Time'].min()
+#                     max_l=filtered_data1['Lead_Time'].max()
+#                     filtered_data1['Normalized_Lead_Time'] = filtered_data1['Lead_Time'].apply(lambda x: normalize(x, min_l,max_l))
+#                     min_p=filtered_data1['Po_Unit_Price'].min()
+#                     max_p=filtered_data1['Po_Unit_Price'].max()  
+                    
+#                     filtered_data1['Normalized_Price'] = filtered_data1['Po_Unit_Price'].apply(lambda x: normalize(x, min_p,max_p))
+#                     filtered_data1['Normalized_Rating'] = filtered_data1['Rating'].apply(lambda x: normalize(x, 0,4))
+                    
+#                     filtered_data1['Score'] = lead_time_weight * filtered_data1['Normalized_Lead_Time'] + price_weight * filtered_data1['Normalized_Price']+ rating_weight * filtered_data1['Normalized_Rating']
+#                     # filtered_data1 = filtered_data1.groupby(['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id', 'Delivery_Port'])['Score'].agg('mean').reset_index()
+#                     filtered_data1 = filtered_data1.groupby(['Item','Vendor','Delivery_Port_Id','Delivery_Port'])['Score'].agg('mean').reset_index()
+#                     filtered_data1.reset_index(drop=True, inplace=True)
+                    
+#                     recommended_vendor = filtered_data1.sort_values(by='Score', ascending=False)
+                    
+#                     filtered_reco=recommended_vendor.head(n_vendor)
+#                     filtered_reco=filtered_reco[['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']]
+#                     print('filtered_reco',filtered_reco)
+#                     # filtered_reco.loc[0,'Item'] = list(items_id_map[keyys][1].split('_'))[0]
+                    
+#                     if len(filtered_reco)!=0:
+#                         final_dataframe= pd.concat([final_dataframe,filtered_reco])
+#                     print(" ******************final dataframe***********************\n",final_dataframe) 
+#             else:
+#                 final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])                       
+#         else:
+#             final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Score':'No data available at this port'},index=[0])])                      
+#         print('final_dataframe -',final_dataframe)
+#     return final_dataframe
 # recommend_vendor(data, ['main engin fuel pump','main engin fuel injector'],['O-RING','SPRING'], ['< MITSUBISHI >','< MAN B&W >'], ['< UEC43LSII >','< S35MC7 >'], ['1411182200','207'], ['239254000000','P909100152'], ['20','207'], 2661, lead_time_weight, price_weight, rating_weight,2)
 # def filter_data(data):
 #     try:
@@ -499,7 +608,7 @@ def filter_data(data):
         # data.dropna(subset=[''])  
         data=data[data['Lead_Time']>0]
         # data=data[data['Po_Unit_Price']>0]
-        data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
+        data.dropna(subset=['Item_mak_mod_processed_uid_80','Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
         data=data[data['Po_Unit_Price']>0]
         # mapping = {'Unsatisfactory-Do Not Pay':4, 'Average-Ok to Pay':3, 'Good-Ok to Pay':2, 'Very Good-Ok to Pay':1,\
         #                 'Excellent-Ok to Pay':0}
@@ -511,50 +620,67 @@ def filter_data(data):
     except Exception as e:
         print(e)
         raise HTTPException(status_code=404, detail='no data found for this query')
-    
-def Item_id_gen_sub(eqp,item,mak,mod,par,draw,pos,ps):
+def Item_id_gen_sub(item,mak,mod,par,ps):
     # global_mapped_data = pd.read_csv(r"E:\OneDrive - MariApps Marine Solutions Pte.Ltd\Treeswise_projects\Vendor Standardization\Vendor_master\Results_all_clients\Item_Vendor_standardized_data_me_withfirstpart.csv")
-    global_mapped_data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
-    global_mapped_data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
+    # global_mapped_data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
+    global_mapped_data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
+    global_mapped_data.dropna(subset=['Item_Mapps_Id_80','Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
     # ps = PorterStemmer()
     #For processing equipment name
-    eqp = re.sub('\W',' ',eqp) 
-    eqp = re.sub(r'\s{2,}',' ',eqp).strip().lower()
-    eqp = re.sub(r'[nm]o \d+|[nm]\d+|[nm]\d \d+',' ',eqp) #removing NO.1 similar patterns
-    eqp = re.sub(r'^\d*\s*|\s*\d*$','',eqp) #remove staring n leading numbers
-    eqp = re.sub(r'\s{2,}',' ',eqp).strip()
-    token = word_tokenize(eqp) #splitting sentence into words
-    stemmed_sentence = reduce(lambda x, y: x + " " + ps.stem(y), token, "") #apply stemming
-    eqp = stemmed_sentence.strip()
+    # eqp = re.sub('\W',' ',eqp) 
+    # eqp = re.sub(r'\s{2,}',' ',eqp).strip().lower()
+    # eqp = re.sub(r' [nm]o \d+| [nm]\d+ | [nm]\d \d+',' ',eqp) #removing NO.1 similar patterns
+    # eqp = re.sub(r'^\d*\s*|\s*\d*$','',eqp) #remove staring n leading numbers
+    # eqp = re.sub(r'\s{2,}',' ',eqp).strip()
+    # token = word_tokenize(eqp) #splitting sentence into words
+    # stemmed_sentence = reduce(lambda x, y: x + " " + ps.stem(y), token, "") #apply stemming
+    # eqp = stemmed_sentence.strip()
     
-    reg1 = re.sub(r'main engin |me |m e |main engin \d+ |me\d+ |me \d+ ','main engin ',eqp).strip().lower()
-    eqp = re.sub(r'\s{2,}',' ',reg1).strip()
+    # reg1 = re.sub(r'main engin | me |^me | m e |^m e |main engin \d+ | me\d+ | me \d+ ','main engin ',eqp).strip()
+    # eqp = re.sub(r'\s{2,}',' ',reg1).strip()
     
-    item_mak_mod = eqp+' '+item+' '+mak+' '+mod
-    item_mak_mod = re.sub('\W',' ',item_mak_mod) 
-    item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip().lower()
-    item_mak_mod = re.sub(r'[nm]o \d+|[nm]\d+|[nm]\d \d+',' ',item_mak_mod) #removing NO.1 similar patterns
-    item_mak_mod = re.sub(r'^\d*\s*|\s*\d*$','',item_mak_mod) #remove staring n leading numbers
+    #standardizing itemname, maker
+    item_mak_mod = item+' '+mak
+    item_mak_mod = re.sub('\W',' ',item_mak_mod).lower() 
+    # item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip().lower()
+    # item_mak_mod = re.sub(r'[nm]o \d+|[nm]\d+|[nm]\d \d+',' ',item_mak_mod) #removing NO.1 similar patterns
+    # item_mak_mod = re.sub(r'^\d*\s*|\s*\d*$','',item_mak_mod) #remove staring n leading numbers
     item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip()
     token2 = word_tokenize(item_mak_mod) #splitting sentence into words
     stemmed_sentence2 = reduce(lambda x, y: x + " " + ps.stem(y), token2, "") #apply stemming
     item_mak_mod = stemmed_sentence2.strip()
-    second_part = par+draw+pos
-    second_part = re.sub(r'\W','',second_part).lower().strip()
+
+    #standardizing model
+    modell = mod
+    modell = re.sub('\W',' ',modell).lower()
+    modell = re.sub(r'\s{2,}',' ',modell).strip()
+
+    item_mak_mod = item_mak_mod+' '+modell
+
+    #standardizing partnumber
+    par = re.sub('\W','',str(par)).lower()
+    par = re.sub(r'\s{1,}','',par).strip()
+
+    item_mak_mod = re.sub(r'0 ring ','o ring ',item_mak_mod).strip()
+    item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip()
+
+
+    second_part = par
+    # second_part = re.sub(r'\W','',second_part).lower().strip()
     print('processing done')
-    if 'main engin' in item_mak_mod:
-        if item_mak_mod in global_mapped_data['item_firstpart_processed'].values:
+    if '' in item_mak_mod:
+        if item_mak_mod in global_mapped_data['Item_mak_mod_processed_uid_80'].values:
             print('1')
-            yu = list(global_mapped_data[global_mapped_data['item_firstpart_processed']==item_mak_mod]['Item_Mapps_id'])[0]
-            first_part_stand = ' '.join(list(yu.split())[:-1])
+            yu = list(global_mapped_data[global_mapped_data['Item_mak_mod_processed_uid_80']==item_mak_mod]['Item_mak_mod_processed_uid_80'])[0]
+            first_part_stand = yu
             print('item_mak_mod -',item_mak_mod)
             print('first_part_stand -',first_part_stand)
-            if first_part_stand+' '+second_part in global_mapped_data['Item_Mapps_id'].values:
+            if first_part_stand+' '+second_part in global_mapped_data['Item_Mapps_Id_80'].values:
                 print(2)
-                item_global_id = list(global_mapped_data[global_mapped_data['Item_Mapps_id']==first_part_stand+' '+second_part]['Item_Mapps_id'])[0]
+                item_global_id = list(global_mapped_data[global_mapped_data['Item_Mapps_Id_80']==first_part_stand+' '+second_part]['Item_Mapps_Id_80'])[0]
                 print('item_mak_mod',item_mak_mod)
                 print('full matching')
-                return {first_part_stand+' '+second_part:[item_global_id,item+'_'+pos]}
+                return {first_part_stand+' '+second_part:[item_global_id,item+'_'+par]}
             else:
                 print(3)
                 print('item_mak_mod',item_mak_mod)    
@@ -570,7 +696,66 @@ def Item_id_gen_sub(eqp,item,mak,mod,par,draw,pos,ps):
     else:
         print(5)
         print('item_mak_mod',item_mak_mod)
-        print('Provided item not related to main engine')    
+        print('Provided item not related to main engine')     
+# def Item_id_gen_sub(eqp,item,mak,mod,par,draw,pos,ps):
+#     # global_mapped_data = pd.read_csv(r"E:\OneDrive - MariApps Marine Solutions Pte.Ltd\Treeswise_projects\Vendor Standardization\Vendor_master\Results_all_clients\Item_Vendor_standardized_data_me_withfirstpart.csv")
+#     global_mapped_data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
+#     global_mapped_data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
+#     # ps = PorterStemmer()
+#     #For processing equipment name
+#     eqp = re.sub('\W',' ',eqp) 
+#     eqp = re.sub(r'\s{2,}',' ',eqp).strip().lower()
+#     eqp = re.sub(r'[nm]o \d+|[nm]\d+|[nm]\d \d+',' ',eqp) #removing NO.1 similar patterns
+#     eqp = re.sub(r'^\d*\s*|\s*\d*$','',eqp) #remove staring n leading numbers
+#     eqp = re.sub(r'\s{2,}',' ',eqp).strip()
+#     token = word_tokenize(eqp) #splitting sentence into words
+#     stemmed_sentence = reduce(lambda x, y: x + " " + ps.stem(y), token, "") #apply stemming
+#     eqp = stemmed_sentence.strip()
+    
+#     reg1 = re.sub(r'main engin |me |m e |main engin \d+ |me\d+ |me \d+ ','main engin ',eqp).strip().lower()
+#     eqp = re.sub(r'\s{2,}',' ',reg1).strip()
+    
+#     item_mak_mod = eqp+' '+item+' '+mak+' '+mod
+#     item_mak_mod = re.sub('\W',' ',item_mak_mod) 
+#     item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip().lower()
+#     item_mak_mod = re.sub(r'[nm]o \d+|[nm]\d+|[nm]\d \d+',' ',item_mak_mod) #removing NO.1 similar patterns
+#     item_mak_mod = re.sub(r'^\d*\s*|\s*\d*$','',item_mak_mod) #remove staring n leading numbers
+#     item_mak_mod = re.sub(r'\s{2,}',' ',item_mak_mod).strip()
+#     token2 = word_tokenize(item_mak_mod) #splitting sentence into words
+#     stemmed_sentence2 = reduce(lambda x, y: x + " " + ps.stem(y), token2, "") #apply stemming
+#     item_mak_mod = stemmed_sentence2.strip()
+#     second_part = par+draw+pos
+#     second_part = re.sub(r'\W','',second_part).lower().strip()
+#     print('processing done')
+#     if 'main engin' in item_mak_mod:
+#         if item_mak_mod in global_mapped_data['item_firstpart_processed'].values:
+#             print('1')
+#             yu = list(global_mapped_data[global_mapped_data['item_firstpart_processed']==item_mak_mod]['Item_Mapps_id'])[0]
+#             first_part_stand = ' '.join(list(yu.split())[:-1])
+#             print('item_mak_mod -',item_mak_mod)
+#             print('first_part_stand -',first_part_stand)
+#             if first_part_stand+' '+second_part in global_mapped_data['Item_Mapps_id'].values:
+#                 print(2)
+#                 item_global_id = list(global_mapped_data[global_mapped_data['Item_Mapps_id']==first_part_stand+' '+second_part]['Item_Mapps_id'])[0]
+#                 print('item_mak_mod',item_mak_mod)
+#                 print('full matching')
+#                 return {first_part_stand+' '+second_part:[item_global_id,item+'_'+pos]}
+#             else:
+#                 print(3)
+#                 print('item_mak_mod',item_mak_mod)    
+#                 print('first part matching')
+#                 return first_part_stand, second_part, False
+#         else:
+#             print(4)
+#             print('first part not matching')
+#             print('item_mak_mod',item_mak_mod)
+#             print('second_part',second_part)
+#             return item_mak_mod, second_part, True       
+            
+#     else:
+#         print(5)
+#         print('item_mak_mod',item_mak_mod)
+#         print('Provided item not related to main engine')    
 
 
 def normalize(v,min_l,max_l):

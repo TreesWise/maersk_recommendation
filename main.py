@@ -237,20 +237,35 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
     if int(len(data)) == 0:
         raise HTTPException(status_code=404, detail='No data found for the given input')
     try:
-        recommended_vendor = recommend_vendor(data, user_inp["item_name"],user_inp['maker'], user_inp['model'], user_inp['part_num'], user_inp['delivery_port_list'], lead_time_weight, price_weight, rating_weight,user_inp['n_vendor'])
-        recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
-        df = pd.DataFrame(recommended_vendor)
-        grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
-        # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
-        # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
-        print('xxxxxxxxxxxxxxxxxxxxxxxx')
-        print(grouped_df)
-        try:
-            grouped_df['Delivery_Port_Id'] = grouped_df['Delivery_Port_Id'].astype('int')
-        except:
-            pass    
-        # return {'data':{"Vendor_Id": str(grouped_df['Vendor_Id']), "Delivery_Port_Id": str(grouped_df['Delivery_Port_Id']),"Item_Id": str(grouped_df['Item_Id']) ,"Score": str(grouped_df['Score'])}}
-        return {'data': {'VendorDeatil':convert_dict(grouped_df.to_dict(orient='records'))}}
+        # recommended_vendor = recommend_vendor(data, user_inp["item_name"],user_inp['maker'], user_inp['model'], user_inp['part_num'], user_inp['delivery_port_list'], lead_time_weight, price_weight, rating_weight,user_inp['n_vendor'])
+        # recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
+        # df = pd.DataFrame(recommended_vendor)
+        # grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
+        # # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
+        # # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
+        # print('xxxxxxxxxxxxxxxxxxxxxxxx')
+        # print(grouped_df)
+        # try:
+        #     grouped_df['Delivery_Port_Id'] = grouped_df['Delivery_Port_Id'].astype('int')
+        # except:
+        #     pass    
+        # # return {'data':{"Vendor_Id": str(grouped_df['Vendor_Id']), "Delivery_Port_Id": str(grouped_df['Delivery_Port_Id']),"Item_Id": str(grouped_df['Item_Id']) ,"Score": str(grouped_df['Score'])}}
+        # return {'data': {'VendorDeatil':convert_dict(grouped_df.to_dict(orient='records'))}}
+        recommended_vendor = recommend_vendor(data,user_inp)
+        if type(recommended_vendor)!=str:
+            recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
+            df = pd.DataFrame(recommended_vendor)
+            grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
+            # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
+            # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
+            print('xxxxxxxxxxxxxxxxxxxxxxxx')
+            print(grouped_df)
+            try:
+                grouped_df['Delivery_Port_Id'] = grouped_df['Delivery_Port_Id'].astype('int')
+            except:
+                pass    
+            # return {'data':{"Vendor_Id": str(grouped_df['Vendor_Id']), "Delivery_Port_Id": str(grouped_df['Delivery_Port_Id']),"Item_Id": str(grouped_df['Item_Id']) ,"Score": str(grouped_df['Score'])}}
+            return {'data': {'VendorDeatil':convert_dict(grouped_df.to_dict(orient='records'))}}   
     except Exception as e:
         print(e)
         raise HTTPException(status_code=404, detail='No data found for the given input')
@@ -386,7 +401,116 @@ def read_data_from_blob_parquet(dataset_name):
 #             print(" ******************final dataframe***********************\n",final_dataframe)
 #     #print("---------------------------------------------\n",final_dataframe)
 #     return final_dataframe
-def recommend_vendor(data, item_name, maker, model, part_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
+## for removing part and drawing number
+# def recommend_vendor(data, item_name, maker, model, part_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
+#     c_client = 'Maersk'
+#     # final_dataframe=pd.DataFrame(columns=['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score'])
+#     final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Included','Score'])
+#     print('started')
+#     ps = PorterStemmer()
+#     items_id_map = {}
+#     new_dict = {}
+#     cat = list(data['Item_mak_mod_processed_uid_80'].unique())
+#     for it,mk,md,par in zip(item_name, maker, model, part_num):
+#         ids = Item_id_gen_sub(it,mk,md,par,ps)
+#         try:
+#             items_id_map.update(ids)
+#             print('has global')
+#         except:
+#             # print('ids',ids)
+#             # print('item_name',it)
+#             # print('pos_num',pos)
+#             first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+par, ids[2]#first part : full part
+#             if status==True:
+#                 print('sim checking')
+#                 print('it -',it)
+                
+#                 main_dict = {}
+#                 for y in cat:
+#                     # print('y',y)
+#                     main_dict[y] = seqratio(first_part.split(),y.split())
+#                 replace = {}
+#                 list1 = []
+#                 for key in main_dict.keys():
+#                     s_dict = {k: v for k,v in main_dict.items() if v>.80} #80%   
+#                     s_dict_filt = dict(sorted(s_dict.items(),key=lambda x:x[1],reverse=True))
+#                     try:
+#                         del s_dict_filt[key]
+#                     except:
+#                         pass    
+#                     if len(s_dict_filt.keys())>0:
+#                         items_id_map[first_part+' '+second_part] = [list(s_dict_filt.keys())[0]+' '+second_part, last_part]
+#                     else:
+#                         items_id_map[first_part+' '+second_part]  = [None,last_part]               
+#                 print('reached')     
+#             else:
+#                 final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])    
+  
+#     print('items_id_map',items_id_map)           
+#     for keyys in items_id_map:
+#         if items_id_map[keyys][0]!=None:
+#             if items_id_map[keyys][0] in data['Item_Mapps_Id_80'].values:
+#                 cp = items_id_map[keyys][0]
+#                 filtered_data = data[data['Item_Mapps_Id_80'] == cp]
+#                 try:
+#                     filtered_data['Delivery_Port_Id'] = filtered_data['Delivery_Port_Id'].astype(int)
+#                 except:
+#                     pass    
+#                 print('port id',filtered_data['Delivery_Port_Id'])
+#                 for deliveryport in [delivery_port_list]:
+#                     filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
+#                     filtered_data1_copy = filtered_data1.copy()
+#                     print('del len - ',len(filtered_data1))
+#                     if len(filtered_data1) == 0:
+#                         print('xxxxxxxxxxx')
+#                         print("'No data found for the given input'")
+#                         final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Included':'NA','Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
+#                         # filtered_reco=filtered_reco[['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score']]
+#                         continue
+#                     min_l=filtered_data1['Lead_Time'].min()
+#                     max_l=filtered_data1['Lead_Time'].max()
+#                     filtered_data1['Normalized_Lead_Time'] = filtered_data1['Lead_Time'].apply(lambda x: normalize(x, min_l,max_l))
+#                     min_p=filtered_data1['Po_Unit_Price'].min()
+#                     max_p=filtered_data1['Po_Unit_Price'].max()  
+                    
+#                     filtered_data1['Normalized_Price'] = filtered_data1['Po_Unit_Price'].apply(lambda x: normalize(x, min_p,max_p))
+#                     filtered_data1['Normalized_Rating'] = filtered_data1['Rating'].apply(lambda x: normalize(x, 0,4))
+                    
+#                     filtered_data1['Score'] = lead_time_weight * filtered_data1['Normalized_Lead_Time'] + price_weight * filtered_data1['Normalized_Price']+ rating_weight * filtered_data1['Normalized_Rating']
+#                     # filtered_data1 = filtered_data1.groupby(['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id', 'Delivery_Port'])['Score'].agg('mean').reset_index()
+#                     filtered_data1 = filtered_data1.groupby(['Item','Vendor','Delivery_Port_Id','Delivery_Port'])['Score'].agg('mean').reset_index()
+#                     filtered_data1.reset_index(drop=True, inplace=True)
+                    
+#                     recommended_vendor = filtered_data1.sort_values(by='Score', ascending=False)
+                    
+#                     filtered_reco=recommended_vendor.head(n_vendor)
+#                     filtered_reco=filtered_reco[['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']]
+#                     client_status = []
+#                     for vid in filtered_reco['Vendor']:
+#                         if vid in list(filtered_data1_copy['Vendor'].unique()):
+#                             vendor_code = list(filtered_data1_copy[filtered_data1_copy['Vendor']==vid]['Vendor_Code'])[0]
+#                             print('kl',filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client'])
+#                             if c_client in filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client']:
+#                                 client_status.append('Yes')
+#                             else:
+#                                 client_status.append('Global list')    
+#                         else:
+#                             client_status.append('Global list')    
+#                     filtered_reco['Included'] = client_status                
+#                     print('filtered_reco',filtered_reco)
+#                     # filtered_reco.loc[0,'Item'] = list(items_id_map[keyys][1].split('_'))[0]
+                    
+#                     if len(filtered_reco)!=0:
+#                         final_dataframe= pd.concat([final_dataframe,filtered_reco])
+#                     print(" ******************final dataframe***********************\n",final_dataframe) 
+#             else:
+#                 final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                       
+#         else:
+#             final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                      
+#         print('final_dataframe -',final_dataframe)
+#     return final_dataframe
+## for changing input structure
+def recommend_vendor(data,user_inp):
     c_client = 'Maersk'
     # final_dataframe=pd.DataFrame(columns=['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score'])
     final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Included','Score'])
@@ -395,104 +519,118 @@ def recommend_vendor(data, item_name, maker, model, part_num, delivery_port_list
     items_id_map = {}
     new_dict = {}
     cat = list(data['Item_mak_mod_processed_uid_80'].unique())
-    for it,mk,md,par in zip(item_name, maker, model, part_num):
-        ids = Item_id_gen_sub(it,mk,md,par,ps)
-        try:
-            items_id_map.update(ids)
-            print('has global')
-        except:
-            # print('ids',ids)
-            # print('item_name',it)
-            # print('pos_num',pos)
-            first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+par, ids[2]#first part : full part
-            if status==True:
-                print('sim checking')
-                print('it -',it)
-                
-                main_dict = {}
-                for y in cat:
-                    # print('y',y)
-                    main_dict[y] = seqratio(first_part.split(),y.split())
-                replace = {}
-                list1 = []
-                for key in main_dict.keys():
-                    s_dict = {k: v for k,v in main_dict.items() if v>.80} #80%   
-                    s_dict_filt = dict(sorted(s_dict.items(),key=lambda x:x[1],reverse=True))
+    item_details_dict = user_inp['itemDetail']
+    delivery_port_list = user_inp['delivery_port_list']
+    n_vendor = user_inp['n_vendor']
+    for row_id in item_details_dict:
+        it = row_id['item_name']
+        mk = row_id['maker']
+        md = row_id['model']
+        par = row_id['part_num']
+        if (it=='')|(mk=='')|(md=='')|(par==''):
+            pass
+        else:
+    # for it,mk,md,par in zip(item_name, maker, model, part_num):
+            ids = Item_id_gen_sub(it,mk,md,par,ps)
+            try:
+                items_id_map.update(ids)
+                print('has global')
+            except:
+                # print('ids',ids)
+                # print('item_name',it)
+                # print('pos_num',pos)
+                first_part, second_part, last_part, status= ids[0], ids[1], it+'_'+par, ids[2]#first part : full part
+                if status==True:
+                    print('sim checking')
+                    print('it -',it)
+                    
+                    main_dict = {}
+                    for y in cat:
+                        # print('y',y)
+                        main_dict[y] = seqratio(first_part.split(),y.split())
+                    replace = {}
+                    list1 = []
+                    for key in main_dict.keys():
+                        s_dict = {k: v for k,v in main_dict.items() if v>.80} #80%   
+                        s_dict_filt = dict(sorted(s_dict.items(),key=lambda x:x[1],reverse=True))
+                        try:
+                            del s_dict_filt[key]
+                        except:
+                            pass    
+                        if len(s_dict_filt.keys())>0:
+                            items_id_map[first_part+' '+second_part] = [list(s_dict_filt.keys())[0]+' '+second_part, last_part]
+                        else:
+                            items_id_map[first_part+' '+second_part]  = [None,last_part]               
+                    print('reached')     
+                else:
+                    final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])    
+  
+    print('items_id_map',items_id_map)      
+    if len(items_id_map.keys())==0: 
+        return 'No data availabale'
+    else:    
+        for keyys in items_id_map:
+            if items_id_map[keyys][0]!=None:
+                if items_id_map[keyys][0] in data['Item_Mapps_Id_80'].values:
+                    cp = items_id_map[keyys][0]
+                    filtered_data = data[data['Item_Mapps_Id_80'] == cp]
                     try:
-                        del s_dict_filt[key]
+                        filtered_data['Delivery_Port_Id'] = filtered_data['Delivery_Port_Id'].astype(int)
                     except:
                         pass    
-                    if len(s_dict_filt.keys())>0:
-                        items_id_map[first_part+' '+second_part] = [list(s_dict_filt.keys())[0]+' '+second_part, last_part]
-                    else:
-                        items_id_map[first_part+' '+second_part]  = [None,last_part]               
-                print('reached')     
-            else:
-                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':it,'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])    
-  
-    print('items_id_map',items_id_map)           
-    for keyys in items_id_map:
-        if items_id_map[keyys][0]!=None:
-            if items_id_map[keyys][0] in data['Item_Mapps_Id_80'].values:
-                cp = items_id_map[keyys][0]
-                filtered_data = data[data['Item_Mapps_Id_80'] == cp]
-                try:
-                    filtered_data['Delivery_Port_Id'] = filtered_data['Delivery_Port_Id'].astype(int)
-                except:
-                    pass    
-                print('port id',filtered_data['Delivery_Port_Id'])
-                for deliveryport in [delivery_port_list]:
-                    filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
-                    filtered_data1_copy = filtered_data1.copy()
-                    print('del len - ',len(filtered_data1))
-                    if len(filtered_data1) == 0:
-                        print('xxxxxxxxxxx')
-                        print("'No data found for the given input'")
-                        final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Included':'NA','Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
-                        # filtered_reco=filtered_reco[['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score']]
-                        continue
-                    min_l=filtered_data1['Lead_Time'].min()
-                    max_l=filtered_data1['Lead_Time'].max()
-                    filtered_data1['Normalized_Lead_Time'] = filtered_data1['Lead_Time'].apply(lambda x: normalize(x, min_l,max_l))
-                    min_p=filtered_data1['Po_Unit_Price'].min()
-                    max_p=filtered_data1['Po_Unit_Price'].max()  
-                    
-                    filtered_data1['Normalized_Price'] = filtered_data1['Po_Unit_Price'].apply(lambda x: normalize(x, min_p,max_p))
-                    filtered_data1['Normalized_Rating'] = filtered_data1['Rating'].apply(lambda x: normalize(x, 0,4))
-                    
-                    filtered_data1['Score'] = lead_time_weight * filtered_data1['Normalized_Lead_Time'] + price_weight * filtered_data1['Normalized_Price']+ rating_weight * filtered_data1['Normalized_Rating']
-                    # filtered_data1 = filtered_data1.groupby(['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id', 'Delivery_Port'])['Score'].agg('mean').reset_index()
-                    filtered_data1 = filtered_data1.groupby(['Item','Vendor','Delivery_Port_Id','Delivery_Port'])['Score'].agg('mean').reset_index()
-                    filtered_data1.reset_index(drop=True, inplace=True)
-                    
-                    recommended_vendor = filtered_data1.sort_values(by='Score', ascending=False)
-                    
-                    filtered_reco=recommended_vendor.head(n_vendor)
-                    filtered_reco=filtered_reco[['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']]
-                    client_status = []
-                    for vid in filtered_reco['Vendor']:
-                        if vid in list(filtered_data1_copy['Vendor'].unique()):
-                            vendor_code = list(filtered_data1_copy[filtered_data1_copy['Vendor']==vid]['Vendor_Code'])[0]
-                            print('kl',filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client'])
-                            if c_client in filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client']:
-                                client_status.append('Yes')
+                    print('port id',filtered_data['Delivery_Port_Id'])
+                    for deliveryport in [delivery_port_list]:
+                        filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
+                        filtered_data1_copy = filtered_data1.copy()
+                        print('del len - ',len(filtered_data1))
+                        if len(filtered_data1) == 0:
+                            print('xxxxxxxxxxx')
+                            print("'No data found for the given input'")
+                            final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':deliveryport,'Included':'NA','Score':'No data available at this port'},index=[0])]) #['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']
+                            # filtered_reco=filtered_reco[['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score']]
+                            continue
+                        min_l=filtered_data1['Lead_Time'].min()
+                        max_l=filtered_data1['Lead_Time'].max()
+                        filtered_data1['Normalized_Lead_Time'] = filtered_data1['Lead_Time'].apply(lambda x: normalize(x, min_l,max_l))
+                        min_p=filtered_data1['Po_Unit_Price'].min()
+                        max_p=filtered_data1['Po_Unit_Price'].max()  
+                        
+                        filtered_data1['Normalized_Price'] = filtered_data1['Po_Unit_Price'].apply(lambda x: normalize(x, min_p,max_p))
+                        filtered_data1['Normalized_Rating'] = filtered_data1['Rating'].apply(lambda x: normalize(x, 0,4))
+                        
+                        filtered_data1['Score'] = lead_time_weight * filtered_data1['Normalized_Lead_Time'] + price_weight * filtered_data1['Normalized_Price']+ rating_weight * filtered_data1['Normalized_Rating']
+                        # filtered_data1 = filtered_data1.groupby(['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id', 'Delivery_Port'])['Score'].agg('mean').reset_index()
+                        filtered_data1 = filtered_data1.groupby(['Item','Vendor','Delivery_Port_Id','Delivery_Port'])['Score'].agg('mean').reset_index()
+                        filtered_data1.reset_index(drop=True, inplace=True)
+                        
+                        recommended_vendor = filtered_data1.sort_values(by='Score', ascending=False)
+                        
+                        filtered_reco=recommended_vendor.head(n_vendor)
+                        filtered_reco=filtered_reco[['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score']]
+                        client_status = []
+                        for vid in filtered_reco['Vendor']:
+                            if vid in list(filtered_data1_copy['Vendor'].unique()):
+                                vendor_code = list(filtered_data1_copy[filtered_data1_copy['Vendor']==vid]['Vendor_Code'])[0]
+                                print('kl',filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client'])
+                                if c_client in filtered_data1_copy[filtered_data1_copy['Vendor_Code']==vendor_code]['Client']:
+                                    client_status.append('Yes')
+                                else:
+                                    client_status.append('Global list')    
                             else:
                                 client_status.append('Global list')    
-                        else:
-                            client_status.append('Global list')    
-                    filtered_reco['Included'] = client_status                
-                    print('filtered_reco',filtered_reco)
-                    # filtered_reco.loc[0,'Item'] = list(items_id_map[keyys][1].split('_'))[0]
-                    
-                    if len(filtered_reco)!=0:
-                        final_dataframe= pd.concat([final_dataframe,filtered_reco])
-                    print(" ******************final dataframe***********************\n",final_dataframe) 
+                        filtered_reco['Included'] = client_status                
+                        print('filtered_reco',filtered_reco)
+                        # filtered_reco.loc[0,'Item'] = list(items_id_map[keyys][1].split('_'))[0]
+                        
+                        if len(filtered_reco)!=0:
+                            final_dataframe= pd.concat([final_dataframe,filtered_reco])
+                        print(" ******************final dataframe***********************\n",final_dataframe) 
+                else:
+                    final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                       
             else:
-                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                       
-        else:
-            final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                      
-        print('final_dataframe -',final_dataframe)
-    return final_dataframe
+                final_dataframe= pd.concat([final_dataframe,pd.DataFrame({'Item':list(items_id_map[keyys][1].split('_'))[0],'Vendor':'NA','Delivery_Port_Id':'NA','Delivery_Port':'NA','Included':'NA','Score':'No data available at this port'},index=[0])])                      
+            print('final_dataframe -',final_dataframe)
+        return final_dataframe
 # def recommend_vendor(data, eqp_name,item_name, maker, model, part_num, draw_num, pos_num, delivery_port_list, lead_time_weight, price_weight, rating_weight,n_vendor):
 #     # final_dataframe=pd.DataFrame(columns=['Vendor_Id','Vendor_Code','Vendor','Item_Id','Delivery_Port_Id','Delivery_Port','Score'])
 #     final_dataframe=pd.DataFrame(columns=['Item','Vendor','Delivery_Port_Id','Delivery_Port','Score'])

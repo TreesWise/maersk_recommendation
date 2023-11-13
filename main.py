@@ -579,7 +579,7 @@ def recommend_vendor(data,user_inp):
                     except:
                         pass    
                     print('port id',filtered_data['Delivery_Port_Id'])
-                    for deliveryport in [delivery_port_list]:
+                    for deliveryport in delivery_port_list:
                         filtered_data1 = filtered_data[filtered_data['Delivery_Port_Id'] == deliveryport]
                         filtered_data1_copy = filtered_data1.copy()
                         print('del len - ',len(filtered_data1))

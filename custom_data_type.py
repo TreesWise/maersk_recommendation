@@ -24,7 +24,7 @@ class UserInput(BaseModel):
     # model : List=None
     # part_num : List=None
     itemDetail : List=None
-    delivery_port_list : int= None
+    delivery_port_list : List= None
     n_vendor : int=None
 
 class SpareRecommendationInput(BaseModel):

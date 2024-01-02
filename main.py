@@ -270,6 +270,57 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
         print(e)
         raise HTTPException(status_code=404, detail='No data found for the given input')
 
+@app.post("/recommend_vendor_test")
+async def fetch_data(userinput: UserInput, current_user: User = Depends(get_current_active_user)):
+    #print(userinput.dict())
+    user_inp =  userinput.dict()
+    print(user_inp)
+    # data = read_data_from_blob_parquet("export")
+    # data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
+    data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
+    data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
+    print(data.head(), data.shape)
+    #data['Delivery_Port_Id'] = data['Delivery_Port_Id'].astype('int')
+    print("data len==",len(data))
+    print(data.columns.to_list())
+    data = filter_data(data)
+    print("filtered data len==",len(data))
+    if int(len(data)) == 0:
+        raise HTTPException(status_code=404, detail='No data found for the given input')
+    try:
+        # recommended_vendor = recommend_vendor(data, user_inp["item_name"],user_inp['maker'], user_inp['model'], user_inp['part_num'], user_inp['delivery_port_list'], lead_time_weight, price_weight, rating_weight,user_inp['n_vendor'])
+        # recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
+        # df = pd.DataFrame(recommended_vendor)
+        # grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
+        # # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
+        # # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
+        # print('xxxxxxxxxxxxxxxxxxxxxxxx')
+        # print(grouped_df)
+        # try:
+        #     grouped_df['Delivery_Port_Id'] = grouped_df['Delivery_Port_Id'].astype('int')
+        # except:
+        #     pass    
+        # # return {'data':{"Vendor_Id": str(grouped_df['Vendor_Id']), "Delivery_Port_Id": str(grouped_df['Delivery_Port_Id']),"Item_Id": str(grouped_df['Item_Id']) ,"Score": str(grouped_df['Score'])}}
+        # return {'data': {'VendorDeatil':convert_dict(grouped_df.to_dict(orient='records'))}}
+        recommended_vendor = recommend_vendor(data,user_inp)
+        if type(recommended_vendor)!=str:
+            recommended_vendor.replace({'NA':0,'No data available at this port':0},inplace=True)
+            df = pd.DataFrame(recommended_vendor)
+            grouped_df = df.groupby(['Vendor','Delivery_Port_Id','Delivery_Port','Included'])[['Item','Score']].agg(list).reset_index()
+            # grouped_df['Item_Id'] = grouped_df['Item_Id'].apply(lambda x: list(x))
+            # grouped_df['Score'] = grouped_df['Score'].apply(lambda x: list(x))
+            print('xxxxxxxxxxxxxxxxxxxxxxxx')
+            print(grouped_df)
+            try:
+                grouped_df['Delivery_Port_Id'] = grouped_df['Delivery_Port_Id'].astype('int')
+            except:
+                pass    
+            # return {'data':{"Vendor_Id": str(grouped_df['Vendor_Id']), "Delivery_Port_Id": str(grouped_df['Delivery_Port_Id']),"Item_Id": str(grouped_df['Item_Id']) ,"Score": str(grouped_df['Score'])}}
+            return {'data': {'VendorDeatil':convert_dict(grouped_df.to_dict(orient='records'))}}   
+    except Exception as e:
+        print(e)
+        raise HTTPException(status_code=404, detail='No data found for the given input')
+
 
 # def convert_dict(data):
 #     data_new = []

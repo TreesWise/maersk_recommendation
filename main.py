@@ -226,7 +226,7 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
     print(user_inp)
     # data = read_data_from_blob_parquet("export")
     # data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
-    data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
+    data = read_data_from_blob("ME_item_stnd_data_v2_new3.csv")
     data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
     print(data.head(), data.shape)
     #data['Delivery_Port_Id'] = data['Delivery_Port_Id'].astype('int')
@@ -277,7 +277,7 @@ async def fetch_data(userinput: UserInput, current_user: User = Depends(get_curr
     print(user_inp)
     # data = read_data_from_blob_parquet("export")
     # data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
-    data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
+    data = read_data_from_blob("ME_item_stnd_data_v2_new3.csv")
     data.dropna(subset=['Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
     print(data.head(), data.shape)
     #data['Delivery_Port_Id'] = data['Delivery_Port_Id'].astype('int')
@@ -812,7 +812,7 @@ def filter_data(data):
 def Item_id_gen_sub(item,mak,mod,par,ps):
     # global_mapped_data = pd.read_csv(r"E:\OneDrive - MariApps Marine Solutions Pte.Ltd\Treeswise_projects\Vendor Standardization\Vendor_master\Results_all_clients\Item_Vendor_standardized_data_me_withfirstpart.csv")
     # global_mapped_data = read_data_from_blob("Item_Vendor_standardized_data_me_withfirstpart.csv")
-    global_mapped_data = read_data_from_blob("ME_item_stnd_data_v2_new.csv")
+    global_mapped_data = read_data_from_blob("ME_item_stnd_data_v2_new3.csv")
     global_mapped_data.dropna(subset=['Item_Mapps_Id_80','Po_Unit_Price','Delivery_Port_Id','Delivery_Port'],inplace=True)
     # ps = PorterStemmer()
     #For processing equipment name
